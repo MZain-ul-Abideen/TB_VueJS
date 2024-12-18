@@ -22,20 +22,23 @@ const newTaskDescription = ref(''); // New task input
 
 // Fetch tasks from the backend
 const fetchTasks = async () => {
+  isLoading.value = true;
   try {
-    const response = await fetch(`${HOST}/api/notes/${props.note.id}/tasks`);
+    const response = await fetch(`${HOST}/notes/${props.note.id}/tasks`);
     if (!response.ok) {
-      throw new Error(`Error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch tasks.');
     }
-    const data = await response.json();
-    tasks.value = data;
+
+    tasks.value = await response.json();
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    errorMessage.value = 'Failed to load tasks.';
+    errorMessage.value = error.message;
   } finally {
     isLoading.value = false;
   }
 };
+
 
 // Create a new task
 const createTask = async () => {
@@ -46,7 +49,7 @@ const createTask = async () => {
   }
 
   try {
-    const response = await fetch(`${HOST}/api/notes/${props.note.id}/tasks`, {
+    const response = await fetch(`${HOST}/notes/${props.note.id}/tasks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,7 +85,7 @@ const deleteTask = async (taskId) => {
   if (!confirm('Are you sure you want to delete this task?')) return;
 
   try {
-    const response = await fetch(`${HOST}/api/tasks/${taskId}`, {
+    const response = await fetch(`${HOST}/tasks/${taskId}`, {
       method: 'DELETE',
     });
 
@@ -99,58 +102,60 @@ const deleteTask = async (taskId) => {
   }
 };
 
-// Delete the entire note
-const deleteNote = () => {
+const deleteNote = async () => {
   if (!confirm('Are you sure you want to delete this note?')) return;
-  emit('delete-note', props.note.id);
+
+  try {
+    const response = await fetch(`${HOST}/notes/${props.note.id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete the note');
+    }
+
+    emit('delete-note', props.note.id); // Emit event to parent component
+  } catch (error) {
+    console.error(error);
+    alert('Unable to delete the note. Please try again later.');
+  }
 };
+
 
 // Fetch tasks when the component is mounted
 onMounted(() => {
   fetchTasks();
 });
 </script>
-
 <template>
   <div :class="['note', note.status]">
     <!-- Delete Note Button -->
     <div class="delete-button" @click="deleteNote" title="Delete Note">&#x1F5D1;</div>
-    
+
     <!-- Note Title -->
     <h2>{{ note.title }}</h2>
 
     <div class="tasks">
-      <!-- Loading Indicator -->
-      <div v-if="isLoading">Loading tasks...</div>
-
-      <!-- Error Message -->
-      <div v-else-if="errorMessage" class="error">
-        {{ errorMessage }}
-      </div>
-
       <!-- Tasks List -->
-      <div v-else>
+      <div>
         <!-- Render each task dynamically -->
         <div v-for="task in tasks" :key="task.id" class="task">
           <div class="content">{{ task.content }}</div>
           <div class="delete-button" @click="deleteTask(task.id)" title="Delete Task">&#x1F5D1;</div>
         </div>
 
+
         <!-- New Task Input -->
         <div class="new-task">
-          <input
-            class="content"
-            placeholder="Enter new task..."
-            v-model="newTaskDescription"
-            @keyup="handleKeyPress"
-          />
-          <button class="create-btn" @click="createTask">+</button>
+          <input class="add-content-field" placeholder="Enter new task..." v-model="newTaskDescription"
+            @keyup.enter="createTask" />
+          <button class="add-btn" @click="createTask">+</button>
         </div>
       </div>
     </div>
   </div>
-</template>
 
+</template>
 <style lang="scss" scoped>
 @use 'assets/mediaQueryScreens.scss' as *;
 @use 'assets/colors.scss' as *;
@@ -169,7 +174,7 @@ $gutter-size: 15px;
   &.unimportant {
     background-color: $dark-green;
 
-    & > input {
+    &>input {
       background-color: $light-green;
       color: darken($dark-green, 20%);
     }
@@ -182,7 +187,7 @@ $gutter-size: 15px;
   &.serious {
     background-color: $dark-yellow;
 
-    & > input {
+    &>input {
       background-color: $light-yellow;
       color: darken($dark-yellow, 20%);
     }
@@ -195,7 +200,7 @@ $gutter-size: 15px;
   &.urgent {
     background-color: $dark-red;
 
-    & > input {
+    &>input {
       background-color: $light-red;
       color: darken($dark-red, 20%);
     }
@@ -206,7 +211,7 @@ $gutter-size: 15px;
   }
 
   /* Delete Button Styling */
-  & > .delete-button {
+  &>.delete-button {
     position: absolute;
     top: 10px;
     right: 10px;
@@ -263,6 +268,7 @@ $gutter-size: 15px;
         font-size: 18px;
         color: rgba(255, 255, 255, 0.6);
         transition: color 0.3s;
+        cursor: pointer;
 
         &:hover {
           color: rgba(255, 255, 255, 0.9);
@@ -276,7 +282,7 @@ $gutter-size: 15px;
       align-items: center;
       margin-top: 10px;
 
-      & > input {
+      &>input {
         flex-grow: 1;
         padding: 10px;
         border: none;
@@ -295,7 +301,7 @@ $gutter-size: 15px;
         }
       }
 
-      & > .create-btn {
+      &>.create-btn {
         width: 40px;
         height: 40px;
         border: none;
@@ -341,5 +347,32 @@ $gutter-size: 15px;
 .error {
   color: red;
   font-weight: bold;
+}
+
+.add-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background-color: transparent;
+  color: inherit;
+  font-size: 1.5em;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+
+  &:hover {
+    border: 2px solid #fff;
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.add-content-field {
+  background-color: transparent;
+  border: 1px solid #fff !important;
+  color: #fff;
 }
 </style>

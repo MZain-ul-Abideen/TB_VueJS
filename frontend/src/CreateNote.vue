@@ -22,7 +22,7 @@ const createNote = async () => {
   }
 
   try {
-    const response = await fetch(`${HOST}/api/notes`, {
+    const response = await fetch(`${HOST}/notes`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
